@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "flight-recommender-api"
+version = "0.1.0"
+description = ""
+authors = ["shonore <s.honore99@gmail.com>"]
+readme = "README.md"
+packages = [{include = "flight_recommender_api"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+typing = "^3.10.0.0"
+numpy = "^1.23.5"
+tensorflow = "^2.11.0"
+tensorflow-recommenders = "^0.7.2"
+tensorflow-datasets = "^4.7.0"
+boto3 = "^1.26.16"
+csv23 = "^0.3.4"
+codecs7z = "^0.0.0.7"
+json5 = "^0.9.10"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
