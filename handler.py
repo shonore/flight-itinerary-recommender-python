@@ -34,7 +34,7 @@ class OriginLensModel(tfrs.Model):
     # Define how the loss is computed.
 
     user_embeddings = self.user_model(features["id"])
-    origin_embeddings = self.origin_model(features["Origin"])
+    origin_embeddings = self.origin_model(features["Destination"])
 
     return self.task(user_embeddings, origin_embeddings)
 
@@ -48,7 +48,7 @@ def hello(event, context):
         
         # Select the basic features.
         destinations = destinations.map(lambda x: {
-            "Origin": x["Origin"],
+            "Destination": x["Destination"],
             "id": x["id"]
         })
         origins = origins.map(lambda x: x["Destination"])
