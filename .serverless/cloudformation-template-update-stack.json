@@ -207,7 +207,7 @@
           "S3Bucket": {
             "Ref": "ServerlessDeploymentBucket"
           },
-          "S3Key": "serverless/flight-recommender-api/dev/1669355481180-2022-11-25T05:51:21.180Z/flight-recommender-api.zip"
+          "S3Key": "serverless/flight-recommender-api/dev/1672716588016-2023-01-03T03:29:48.016Z/flight-recommender-api.zip"
         },
         "Handler": "s_hello.handler",
         "Runtime": "python3.8",
@@ -225,14 +225,14 @@
         "HelloLogGroup"
       ]
     },
-    "HelloLambdaVersion0I5SBpuGbgyBTFbU8zmxAdDXdSYnBQf39RGcWVyXs9Q": {
+    "HelloLambdaVersion0TqTfwdgc6UVpJserM79HxX6cgDkPy1lHwQQon3nICk": {
       "Type": "AWS::Lambda::Version",
       "DeletionPolicy": "Retain",
       "Properties": {
         "FunctionName": {
           "Ref": "HelloLambdaFunction"
         },
-        "CodeSha256": "NKkod5omYL3jLvDX8m6d9/05BbaZML2fhFt2YJntXvc="
+        "CodeSha256": "KJTdmAVO8WoCuaXUIt5Vd+BHX+oI4pqdaAi/emrcjdc="
       }
     },
     "HttpApi": {
@@ -390,7 +390,7 @@
     "HelloLambdaFunctionQualifiedArn": {
       "Description": "Current Lambda function version",
       "Value": {
-        "Ref": "HelloLambdaVersion0I5SBpuGbgyBTFbU8zmxAdDXdSYnBQf39RGcWVyXs9Q"
+        "Ref": "HelloLambdaVersion0TqTfwdgc6UVpJserM79HxX6cgDkPy1lHwQQon3nICk"
       },
       "Export": {
         "Name": "sls-flight-recommender-api-dev-HelloLambdaFunctionQualifiedArn"
