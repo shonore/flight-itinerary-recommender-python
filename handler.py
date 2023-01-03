@@ -50,7 +50,9 @@ def hello(event, context):
         training_data = training_data.map(lambda x: {
             "Destination": x["Destination"],
             "Origin": x["Origin"],
-            "id": x["id"]
+            "id": x["id"],
+            "Travel_Date": x["Travel_Date"],
+            "Fare_Price": x["Fare_Price"]
         })
         origins = origins.map(lambda x: x["Destination"])
         user_ids_vocabulary = tf.keras.layers.StringLookup(mask_token=None)
