@@ -89,6 +89,12 @@
               "LogGroupName": "/aws/lambda/flight-recommender-api-dev-hello"
             }
           },
+          "RecommendLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+              "LogGroupName": "/aws/lambda/flight-recommender-api-dev-recommend"
+            }
+          },
           "IamRoleLambdaExecution": {
             "Type": "AWS::IAM::Role",
             "Properties": {
@@ -203,6 +209,12 @@
                               "HelloLogGroup",
                               "Arn"
                             ]
+                          },
+                          {
+                            "Fn::GetAtt": [
+                              "RecommendLogGroup",
+                              "Arn"
+                            ]
                           }
                         ]
                       }
@@ -219,7 +231,7 @@
                 "S3Bucket": {
                   "Ref": "ServerlessDeploymentBucket"
                 },
-                "S3Key": "serverless/flight-recommender-api/dev/1672716588016-2023-01-03T03:29:48.016Z/flight-recommender-api.zip"
+                "S3Key": "serverless/flight-recommender-api/dev/1673206296002-2023-01-08T19:31:36.002Z/flight-recommender-api.zip"
               },
               "Handler": "s_hello.handler",
               "Runtime": "python3.8",
@@ -237,14 +249,49 @@
               "HelloLogGroup"
             ]
           },
-          "HelloLambdaVersion0TqTfwdgc6UVpJserM79HxX6cgDkPy1lHwQQon3nICk": {
+          "RecommendLambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+              "Code": {
+                "S3Bucket": {
+                  "Ref": "ServerlessDeploymentBucket"
+                },
+                "S3Key": "serverless/flight-recommender-api/dev/1673206296002-2023-01-08T19:31:36.002Z/flight-recommender-api.zip"
+              },
+              "Handler": "s_recommend.handler",
+              "Runtime": "python3.8",
+              "FunctionName": "flight-recommender-api-dev-recommend",
+              "MemorySize": 1024,
+              "Timeout": 6,
+              "Role": {
+                "Fn::GetAtt": [
+                  "IamRoleLambdaExecution",
+                  "Arn"
+                ]
+              }
+            },
+            "DependsOn": [
+              "RecommendLogGroup"
+            ]
+          },
+          "HelloLambdaVersionHZVsuC4zLZDJtHAmm0itkDsbH6LZDP9WSr0g9W9I": {
             "Type": "AWS::Lambda::Version",
             "DeletionPolicy": "Retain",
             "Properties": {
               "FunctionName": {
                 "Ref": "HelloLambdaFunction"
               },
-              "CodeSha256": "KJTdmAVO8WoCuaXUIt5Vd+BHX+oI4pqdaAi/emrcjdc="
+              "CodeSha256": "X7C2whoVQbiXus5633kbwcbTreWxRUIjwWiqRs/wVko="
+            }
+          },
+          "RecommendLambdaVersion8fKXmMmc5pmV3HhHCemULE9DPgNvm9BWVpndVug0": {
+            "Type": "AWS::Lambda::Version",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+              "FunctionName": {
+                "Ref": "RecommendLambdaFunction"
+              },
+              "CodeSha256": "X7C2whoVQbiXus5633kbwcbTreWxRUIjwWiqRs/wVko="
             }
           },
           "HttpApi": {
@@ -355,6 +402,78 @@
             },
             "DependsOn": "HttpApiIntegrationHello"
           },
+          "RecommendLambdaPermissionHttpApi": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+              "FunctionName": {
+                "Fn::GetAtt": [
+                  "RecommendLambdaFunction",
+                  "Arn"
+                ]
+              },
+              "Action": "lambda:InvokeFunction",
+              "Principal": "apigateway.amazonaws.com",
+              "SourceArn": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":execute-api:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":",
+                    {
+                      "Ref": "HttpApi"
+                    },
+                    "/*"
+                  ]
+                ]
+              }
+            }
+          },
+          "HttpApiIntegrationRecommend": {
+            "Type": "AWS::ApiGatewayV2::Integration",
+            "Properties": {
+              "ApiId": {
+                "Ref": "HttpApi"
+              },
+              "IntegrationType": "AWS_PROXY",
+              "IntegrationUri": {
+                "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"RecommendLambdaPermissionHttpApi\"][\"Properties\"][\"FunctionName\"]"
+              },
+              "PayloadFormatVersion": "2.0",
+              "TimeoutInMillis": 30000
+            }
+          },
+          "HttpApiRouteGetRecommend": {
+            "Type": "AWS::ApiGatewayV2::Route",
+            "Properties": {
+              "ApiId": {
+                "Ref": "HttpApi"
+              },
+              "RouteKey": "GET /recommend",
+              "Target": {
+                "Fn::Join": [
+                  "/",
+                  [
+                    "integrations",
+                    {
+                      "Ref": "HttpApiIntegrationRecommend"
+                    }
+                  ]
+                ]
+              }
+            },
+            "DependsOn": "HttpApiIntegrationRecommend"
+          },
           "CWLSubFilterHelloLogGroupUsEast1": {
             "Type": "AWS::Logs::SubscriptionFilter",
             "Properties": {
@@ -362,6 +481,16 @@
               "FilterPattern": "?\"REPORT RequestId: \" ?\"SERVERLESS_ENTERPRISE\"",
               "LogGroupName": {
                 "Ref": "HelloLogGroup"
+              }
+            }
+          },
+          "CWLSubFilterRecommendLogGroupUsEast1": {
+            "Type": "AWS::Logs::SubscriptionFilter",
+            "Properties": {
+              "DestinationArn": "arn:aws:logs:us-east-1:802587217904:destination:3558ab7e-69f6-4d45-9efc-901d8e5af483#BLxqJnS86Pk829NyzR#flight-recommender-api#dev",
+              "FilterPattern": "?\"REPORT RequestId: \" ?\"SERVERLESS_ENTERPRISE\"",
+              "LogGroupName": {
+                "Ref": "RecommendLogGroup"
               }
             }
           },
@@ -399,10 +528,19 @@
           "HelloLambdaFunctionQualifiedArn": {
             "Description": "Current Lambda function version",
             "Value": {
-              "Ref": "HelloLambdaVersion0TqTfwdgc6UVpJserM79HxX6cgDkPy1lHwQQon3nICk"
+              "Ref": "HelloLambdaVersionHZVsuC4zLZDJtHAmm0itkDsbH6LZDP9WSr0g9W9I"
             },
             "Export": {
               "Name": "sls-flight-recommender-api-dev-HelloLambdaFunctionQualifiedArn"
+            }
+          },
+          "RecommendLambdaFunctionQualifiedArn": {
+            "Description": "Current Lambda function version",
+            "Value": {
+              "Ref": "RecommendLambdaVersion8fKXmMmc5pmV3HhHCemULE9DPgNvm9BWVpndVug0"
+            },
+            "Export": {
+              "Name": "sls-flight-recommender-api-dev-RecommendLambdaFunctionQualifiedArn"
             }
           },
           "HttpApiId": {
@@ -550,7 +688,27 @@
         "timeout": 6,
         "runtime": "python3.8",
         "vpc": {},
-        "versionLogicalId": "HelloLambdaVersion0TqTfwdgc6UVpJserM79HxX6cgDkPy1lHwQQon3nICk"
+        "versionLogicalId": "HelloLambdaVersionHZVsuC4zLZDJtHAmm0itkDsbH6LZDP9WSr0g9W9I"
+      },
+      "recommend": {
+        "handler": "s_recommend.handler",
+        "events": [
+          {
+            "httpApi": {
+              "path": "/recommend",
+              "method": "get"
+            },
+            "resolvedMethod": "GET",
+            "resolvedPath": "/recommend"
+          }
+        ],
+        "name": "flight-recommender-api-dev-recommend",
+        "package": {},
+        "memory": 1024,
+        "timeout": 6,
+        "runtime": "python3.8",
+        "vpc": {},
+        "versionLogicalId": "RecommendLambdaVersion8fKXmMmc5pmV3HhHCemULE9DPgNvm9BWVpndVug0"
       }
     },
     "configValidationMode": "warn",
@@ -577,7 +735,7 @@
     "artifact": "/Users/stephaniehonore/Desktop/flight-recommender-serverless/.serverless/flight-recommender-api.zip"
   },
   "package": {
-    "artifactDirectoryName": "serverless/flight-recommender-api/dev/1672716588016-2023-01-03T03:29:48.016Z",
+    "artifactDirectoryName": "serverless/flight-recommender-api/dev/1673206296002-2023-01-08T19:31:36.002Z",
     "artifact": "flight-recommender-api.zip"
   }
 }

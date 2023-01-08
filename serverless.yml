@@ -9,8 +9,14 @@ provider:
 
 functions:
   hello:
-    handler: handler.hello
+    handler: handler.poc
     events:
       - httpApi:
           path: /
           method: get
+  recommend:
+    handler: recommender.getItineraries
+    events:
+      - httpApi:
+          path: /recommend
+          method: get  
