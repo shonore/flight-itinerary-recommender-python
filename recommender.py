@@ -20,17 +20,17 @@ class ItineraryModel(tfrs.models.Model):
     super().__init__()
    
     embedding_dimension = 32
-    
+
     # User and destination models.
     self.user_model = tf.keras.Sequential([
-        tf.keras.layers.StringLookup(vocabulary=user_ids,mask_token=None),
-        tf.keras.layers.Embedding(len(user_ids) + 1, embedding_dimension),
+        tf.keras.layers.StringLookup(vocabulary=unique_user_ids,mask_token=None),
+        tf.keras.layers.Embedding(len(unique_user_ids) + 1, embedding_dimension),
         tf.keras.layers.Reshape([-1,])
     ])
 
     self.destination_model = tf.keras.Sequential([
-        tf.keras.layers.StringLookup(vocabulary=destinations,mask_token=None),
-        tf.keras.layers.Embedding(len(destinations) + 1, embedding_dimension),
+        tf.keras.layers.StringLookup(vocabulary=unique_destinations,mask_token=None),
+        tf.keras.layers.Embedding(len(unique_destinations) + 1, embedding_dimension),
         tf.keras.layers.Reshape([-1,])
     ])
 
@@ -115,13 +115,20 @@ training_data = training_data.map(lambda x: {
 
 destinations = destinations.map(lambda x: x["Destination"])
 travel_dates = travel_dates.map(lambda x: x["Travel_Date"])
-user_ids = training_data.map(lambda x: x["Travel_Date"])
 # Randomly shuffle data and split between train and test.
 tf.random.set_seed(42)
 shuffled = training_data.shuffle(100_000, seed=42, reshuffle_each_iteration=False)
 
 train = shuffled.take(80_000)
 test = shuffled.skip(80_000).take(20_000)
+
+destination_names = destinations.batch(1_000)
+ids = training_data.batch(1_000_000).map(lambda x: x["id"])
+travel_dates_batch = travel_dates.batch(1_000)
+
+unique_destinations = np.unique(np.concatenate(list(destination_names)))
+unique_user_ids = np.unique(np.concatenate(list(ids)))
+unique_travel_dates = np.unique(np.concatenate(list(travel_dates_batch)))
 
 # Let's now train a model that assigns positive weights to both retrieval and ranking tasks.
 model = ItineraryModel(rating_weight=1.0, retrieval_weight=1.0)
@@ -139,19 +146,23 @@ cached_test = test.batch(4096).cache()
 
 def getItineraries(event, context):
     try:
-        model.fit(cached_train, epochs=3, verbose=1)
+        model.fit(cached_train, epochs=3)
+        # metrics = model.evaluate(cached_test, return_dict=True)
+
+        # print(f"Retrieval top-100 accuracy: {metrics['factorized_top_k/top_100_categorical_accuracy']:.3f}.")
+        # print(f"Ranking RMSE: {metrics['root_mean_squared_error']:.3f}.")
 
          # # Use brute-force search to set up retrieval using the trained representations.
-        test_destinations = cached_test.map(lambda x: x["Destination"])
         index = tfrs.layers.factorized_top_k.BruteForce(model.user_model)
         index.index_from_dataset(
-            test_destinations.batch(100).map(lambda destination: (destination, model.destination_model(destination))))
+            destinations.batch(100).map(lambda destination: (destination, model.destination_model(destination))))
 
         # Get some recommendations.
         _, recommendedDestinations = index(np.array(["00021700f41a71382d3f5f1d87ed3e72"]))
-        tf.print(recommendedDestinations[0,:3])
         test_ratings = {}
         topDestinations = recommendedDestinations[0, :3]
+        tf.print(topDestinations)
+
         for destination in topDestinations:
             test_ratings[destination] = model({
                 "id": np.array(["0021700f41a71382d3f5f1d87ed3e72"]),
