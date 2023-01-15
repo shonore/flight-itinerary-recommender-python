@@ -25,20 +25,26 @@ class ItineraryModel(tfrs.models.Model):
     self.user_model = tf.keras.Sequential([
         tf.keras.layers.StringLookup(vocabulary=unique_user_ids,mask_token=None),
         tf.keras.layers.Embedding(len(unique_user_ids) + 1, embedding_dimension),
-        tf.keras.layers.Reshape([-1,])
+        tf.keras.layers.Reshape([-1])
     ])
 
     self.destination_model = tf.keras.Sequential([
         tf.keras.layers.StringLookup(vocabulary=unique_destinations,mask_token=None),
         tf.keras.layers.Embedding(len(unique_destinations) + 1, embedding_dimension),
-        tf.keras.layers.Reshape([-1,])
+        tf.keras.layers.Reshape([-1])
     ])
 
-    # self.travel_date_model = tf.keras.Sequential([
-    #     tf.keras.layers.StringLookup(vocabulary=unique_travel_dates, mask_token=None),
-    #     tf.keras.layers.Embedding(len(unique_travel_dates) + 1, embedding_dimension),
-    #     tf.keras.layers.Reshape([-1,])
-    # ])
+    self.travel_date_model = tf.keras.Sequential([
+        tf.keras.layers.StringLookup(vocabulary=unique_travel_dates, mask_token=None),
+        tf.keras.layers.Embedding(len(unique_travel_dates) + 1, embedding_dimension),
+        tf.keras.layers.Reshape([-1])
+    ])
+
+    self.origin_model = tf.keras.Sequential([
+        tf.keras.layers.StringLookup(vocabulary=unique_origins, mask_token=None),
+        tf.keras.layers.Embedding(len(unique_origins) + 1, embedding_dimension),
+        tf.keras.layers.Reshape([-1])
+    ])
 
     self.rating_model = tf.keras.Sequential([
         tf.keras.layers.Dense(256, activation="relu"),
@@ -52,49 +58,52 @@ class ItineraryModel(tfrs.models.Model):
         metrics=[tf.keras.metrics.RootMeanSquaredError()],
     )
     
-    self.retrieval_task: tf.keras.layers.Layer = tfrs.tasks.Retrieval(
+    self.destination_retrieval_task: tf.keras.layers.Layer = tfrs.tasks.Retrieval(
         metrics=tfrs.metrics.FactorizedTopK(
-            destinations.batch(128).map(self.destination_model)
+            candidates=destinations.batch(128).map(self.destination_model)
         )
     )
+    # self.origin_retrieval_task: tf.keras.layers.Layer = tfrs.tasks.Retrieval(
+    #     metrics=tfrs.metrics.FactorizedTopK(
+    #         origins.batch(128).map(self.origin_model)
+    #     )
+    # )
     # self.travel_date_retrieval_task: tf.keras.layers.Layer = tfrs.tasks.Retrieval(
     #     metrics=tfrs.metrics.FactorizedTopK(
     #         travel_dates.batch(128).map(self.travel_date_model)
     #     )
     # )
+
     # The loss weights.
     self.rating_weight = rating_weight
     self.retrieval_weight = retrieval_weight
 
   def call(self, features: Dict[Text, tf.Tensor]) -> tf.Tensor:
     # We pick out the user features and pass them into the user model.
-    user_embeddings = self.user_model(features["id"])
-    # And pick out the destination features and pass them into the destination model.
-    destination_embeddings = self.destination_model(features["Destination"])
-    #travel_date_embeddings = self.travel_date_model(features["Travel_Date"])
-    return (
-        user_embeddings,
-        destination_embeddings,
-        self.rating_model(
-            tf.concat([user_embeddings, destination_embeddings], axis=1)
-        ),
-    )
+    user_embedding = self.user_model(features["id"])
+    # And pick out the destination, travel date, and origin features and pass them into their models.
+    destination_embedding = self.destination_model(features["Destination"])
+    travel_date_embedding = self.travel_date_model(features["Travel_Date"])
+    origin_embedding = self.origin_model(features["Origin"])
+
+    return  user_embedding, destination_embedding, travel_date_embedding, origin_embedding, self.rating_model(tf.concat([user_embedding, destination_embedding], axis=1))
 
   def compute_loss(self, features: Dict[Text, tf.Tensor], training=False) -> tf.Tensor:
     # Define how the loss is computed.
     fare_price = features.pop("Fare_Price")
-    user_embeddings, destination_embeddings, fare_price_predictions = self(features)
+    user_embedding, destination_embedding, travel_date_embedding, origin_embedding, fare_price_predictions = self(features)
 
     # We compute the loss for each task.
     rating_loss = self.rating_task(
         labels=fare_price,
         predictions=fare_price_predictions,
     )
-    destination_retrieval_loss = self.retrieval_task(user_embeddings, destination_embeddings)
+    destination_retrieval_loss = self.destination_retrieval_task(user_embedding,destination_embedding)
+    # origin_retrieval_loss = self.origin_retrieval_task(destination_embedding,origin_embedding)
+    # travel_date_retrieval_loss = self.travel_date_retrieval_task(origin_embedding,travel_date_embedding)
     # And combine them using the loss weights.
     return (self.rating_weight * rating_loss
             + self.retrieval_weight * destination_retrieval_loss)
-
 
 client = boto3.client("s3")
 data = client.get_object(Bucket='travel-listing-from-makemytrip', Key='makemytrip_travel_data_clean_csv.csv')
@@ -103,7 +112,8 @@ pandasDF = pd.read_csv(data.get("Body"))
 training_data = tf.data.Dataset.from_tensor_slices(dict(pandasDF))
 destinations = tf.data.Dataset.from_tensor_slices(dict(pandasDF.drop_duplicates(subset="Destination")))
 travel_dates = tf.data.Dataset.from_tensor_slices(dict(pandasDF.drop_duplicates(subset="Travel_Date")))
-       
+origins = tf.data.Dataset.from_tensor_slices(dict(pandasDF.drop_duplicates(subset="Origin")))    
+
 # Select the basic features.
 training_data = training_data.map(lambda x: {
     "id": x["id"],
@@ -114,7 +124,9 @@ training_data = training_data.map(lambda x: {
 })
 
 destinations = destinations.map(lambda x: x["Destination"])
+origins = origins.map(lambda x: x["Origin"])
 travel_dates = travel_dates.map(lambda x: x["Travel_Date"])
+
 # Randomly shuffle data and split between train and test.
 tf.random.set_seed(42)
 shuffled = training_data.shuffle(100_000, seed=42, reshuffle_each_iteration=False)
@@ -122,31 +134,26 @@ shuffled = training_data.shuffle(100_000, seed=42, reshuffle_each_iteration=Fals
 train = shuffled.take(80_000)
 test = shuffled.skip(80_000).take(20_000)
 
-destination_names = destinations.batch(1_000)
 ids = training_data.batch(1_000_000).map(lambda x: x["id"])
+destination_names = destinations.batch(1_000)
 travel_dates_batch = travel_dates.batch(1_000)
+origin_names = origins.batch(1_000)
 
-unique_destinations = np.unique(np.concatenate(list(destination_names)))
 unique_user_ids = np.unique(np.concatenate(list(ids)))
+unique_destinations = np.unique(np.concatenate(list(destination_names)))
 unique_travel_dates = np.unique(np.concatenate(list(travel_dates_batch)))
+unique_origins = np.unique(np.concatenate(list(origin_names)))
 
 # Let's now train a model that assigns positive weights to both retrieval and ranking tasks.
-model = ItineraryModel(rating_weight=1.0, retrieval_weight=1.0)
-model.compile(optimizer=tf.keras.optimizers.Adagrad(0.1))
+model = ItineraryModel(rating_weight=0, retrieval_weight=1.0)
+model.compile(optimizer=tf.keras.optimizers.Adagrad(0.1), loss=tf.keras.losses.CategoricalCrossentropy())
        
 cached_train = train.shuffle(100_000).batch(8192).cache()
 cached_test = test.batch(4096).cache()
-# cached_train = cached_train.map(lambda x: {
-#             "id": tf.reshape(x["id"], [1,1]),
-#             "Destination": tf.reshape(x["Destination"], [1,1]),
-#             "Origin": tf.reshape(x["Origin"], [1,1]),
-#             "Travel_Date": tf.reshape(x["Travel_Date"], [1,1]),
-#             "Fare_Price": tf.reshape(x["Fare_Price"], [1,1]),
-# }).cache()
 
 def getItineraries(event, context):
     try:
-        model.fit(cached_train, epochs=3)
+        model.fit(cached_train, epochs=15)
         # metrics = model.evaluate(cached_test, return_dict=True)
 
         # print(f"Retrieval top-100 accuracy: {metrics['factorized_top_k/top_100_categorical_accuracy']:.3f}.")
@@ -156,26 +163,23 @@ def getItineraries(event, context):
         index = tfrs.layers.factorized_top_k.BruteForce(model.user_model)
         index.index_from_dataset(
             destinations.batch(100).map(lambda destination: (destination, model.destination_model(destination))))
-
-        # Get some recommendations.
         _, recommendedDestinations = index(np.array(["00021700f41a71382d3f5f1d87ed3e72"]))
-        test_ratings = {}
-        topDestinations = recommendedDestinations[0, :3]
-        tf.print(topDestinations)
-
-        for destination in topDestinations:
-            test_ratings[destination] = model({
-                "id": np.array(["0021700f41a71382d3f5f1d87ed3e72"]),
-                "Destination": np.array([destination])
-            })
-
-        tf.print("Travel Dates:")
-        for title, score in sorted(test_ratings.items(), key=lambda x: x[1], reverse=True):
-            tf.print(f"{title}: {score}")
+        itinerary = {}
+        
+        for idx, destination in enumerate(recommendedDestinations[0, :3]):
+            index.index_from_dataset(
+            travel_dates.batch(100).map(lambda travelDate: (travelDate, model.travel_date_model(travelDate))))
+            # Get some travel date recommendations.
+            _, recommendedTravelDates = index(np.array([str(destination)]))
+            topDates = recommendedTravelDates[0,:3]
+            itinerary[f"itinerary-{idx}"] = {
+                 "id": "0021700f41a71382d3f5f1d87ed3e72",
+                 "Destination": str(destination),
+                 "Travel_Date": str(topDates[idx])
+             }
 
         body = {
-            "data": f"wip",
-            "input": event,
+            "data": itinerary,
         }
 
         response = {"statusCode": 200, "body": json.dumps(body)}
