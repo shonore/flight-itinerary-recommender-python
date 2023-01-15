@@ -144,7 +144,7 @@ def poc(event, context):
         model1 = OriginLensModel(user_model, origin_model, task1)
         model1.compile(optimizer=tf.keras.optimizers.Adagrad(0.5))
 
-        # # Train for 3 epochs.
+        # Train for 3 epochs.
         model1.fit(training_data.batch(4096), epochs=5)
 
         # # Use brute-force search to set up retrieval using the trained representations.
@@ -154,7 +154,7 @@ def poc(event, context):
 
         # Get some recommendations.
         _, recommendedDestinations = index(np.array(["00021700f41a71382d3f5f1d87ed3e72"]))
-        #tf.print("Top 3 recommendations for user 00021700f41a71382d3f5f1d87ed3e72:" + recommendedDestinations[0, :3])
+        tf.print("Top 3 recommendations for user 00021700f41a71382d3f5f1d87ed3e72:" + recommendedDestinations[0, :3])
         #Ranking
         # model2 = DestinationsModel(user_model, origin_model)
         # model2.compile(optimizer=tf.keras.optimizers.Adagrad(learning_rate=0.1))
