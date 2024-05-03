@@ -53,7 +53,7 @@ tensorflow-metadata==1.11.0
 tensorflow-recommenders==0.7.2
 termcolor==2.1.1
 toml==0.10.2
-tqdm==4.64.1
+tqdm==4.66.3
 typing_extensions==4.4.0
 urllib3==1.26.13
 Werkzeug==2.2.2
