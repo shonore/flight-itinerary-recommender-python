@@ -19,7 +19,7 @@ h5py==3.7.0
 idna==3.4
 importlib-resources==5.10.0
 jmespath==1.0.1
-keras==2.11.0
+keras==3.9.0
 layers==0.1.5
 libclang==14.0.6
 Markdown==3.4.1
