@@ -30,7 +30,7 @@ opt-einsum==3.3.0
 packaging==21.3
 pandas==1.5.2
 promise==2.3
-protobuf==3.19.6
+protobuf==6.33.5
 pyasn1==0.4.8
 pyasn1-modules==0.2.8
 pyparsing==3.0.9
